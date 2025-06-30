@@ -4,6 +4,8 @@ import * as chordType from "@tonaljs/chord-type";
 import type { ChordType } from "@tonaljs/chord-type";
 import * as Tone from "tone";
 import Piano from "./Piano";
+import ChordProgressionSection from "./Chord_Progression_Section";
+import CollapsibleSection from "./CollapsibleSection";
 
 const allRoots = [
   "C",
@@ -19,24 +21,17 @@ const allRoots = [
   "A#",
   "B",
 ];
+
 const chordTypes = chordType
   .all()
   .map((type: ChordType) => type.aliases?.[0])
   .filter((alias): alias is string => typeof alias === "string");
-
-// Add progression templates here
-const progressionTemplates: { [label: string]: string[] } = {
-  "I–V–vi–IV": ["Cmaj", "Gmaj", "Am", "Fmaj"],
-  "ii–V–I": ["Dm7", "G7", "Cmaj7"],
-  "12-Bar Blues": ["C7", "F7", "C7", "G7"],
-};
 
 export default function ChordSearch() {
   const [query, setQuery] = useState("");
   const [selectedChord, setSelectedChord] = useState<string | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const [bassNote, setBassNote] = useState<string | null>(null);
-  const [useRootAsBass, setUseRootAsBass] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [playStyle, setPlayStyle] = useState<"chord" | "arpeggio">("chord");
   const [duration, setDuration] = useState<"short" | "medium" | "long">(
@@ -44,18 +39,13 @@ export default function ChordSearch() {
   );
   const [velocity, setVelocity] = useState<"low" | "medium" | "high">("medium");
   const [selectedMelody, setSelectedMelody] = useState<string[]>([]);
-  const [inversion, setInversion] = useState(false);
   const [harmonicsMode, setHarmonicsMode] = useState(false);
   const [loop, setLoop] = useState(false);
-  const [eightBarLoop, setEightBarLoop] = useState(false); // new toggle for 8 bar loop
+  const [eightBarLoop, setEightBarLoop] = useState(false);
   const [progression, setProgression] = useState<string[]>([]);
 
   const loopInterval = useRef<NodeJS.Timeout | null>(null);
-
-  // Your velocity map with dB values
   const velocityMap = { low: -24, medium: -12, high: 0 };
-
-  // Your existing time map for durations
   const timeMap = { short: "4n", medium: "2n", long: "1n" };
 
   const filteredSuggestions = allRoots
@@ -68,8 +58,8 @@ export default function ChordSearch() {
   useEffect(() => {
     if (loop && selectedChord) {
       loopInterval.current = setInterval(() => playChord(), 2000);
-    } else {
-      if (loopInterval.current) clearInterval(loopInterval.current);
+    } else if (loopInterval.current) {
+      clearInterval(loopInterval.current);
     }
     return () => {
       if (loopInterval.current) clearInterval(loopInterval.current);
@@ -85,11 +75,9 @@ export default function ChordSearch() {
     isMuted,
   ]);
 
-  // Adds a tiny random velocity offset for humanized feel
   function getHumanizedVelocity(): number {
-    // Tone.Volume values are in dB, so small random offset
     const base = velocityMap[velocity];
-    const offset = (Math.random() - 0.5) * 4; // ±2 dB random
+    const offset = (Math.random() - 0.5) * 4;
     return base + offset;
   }
 
@@ -99,7 +87,6 @@ export default function ChordSearch() {
     const baseOctave = 4;
     let fullNotes = chordInfo.notes.map((n) => Note.pitchClass(n) + baseOctave);
 
-    if (inversion) fullNotes = [...fullNotes.slice(1), fullNotes[0]];
     if (harmonicsMode) {
       fullNotes = fullNotes.map(
         (note, i) => Note.pitchClass(note) + (4 + Math.floor(i / 2))
@@ -107,39 +94,10 @@ export default function ChordSearch() {
     }
 
     const root = chordInfo.tonic;
-    setBassNote(useRootAsBass && root ? root + "2" : null);
+    setBassNote(root ? root + "2" : null);
     setNotes(fullNotes);
     setSelectedMelody([]);
     playChord(fullNotes);
-  }
-
-  function suggestBassNotes(): string[] {
-    if (!selectedChord) return [];
-    const chordInfo = Chord.get(selectedChord);
-    return [0, 2, 4].map(
-      (i) => chordInfo.notes[i % chordInfo.notes.length] + "2"
-    );
-  }
-
-  function handleBassClick(note: string) {
-    setBassNote(note);
-  }
-
-  function suggestMelodyNotes(): string[] {
-    if (!selectedChord) return [];
-    const chordInfo = Chord.get(selectedChord);
-    if (!chordInfo.tonic) return [];
-    return Scale.get(`${chordInfo.tonic} major`).notes.map((n) => n + "5");
-  }
-
-  function toggleMelodyNote(note: string) {
-    setSelectedMelody((prev) =>
-      prev.includes(note) ? prev.filter((n) => n !== note) : [...prev, note]
-    );
-  }
-
-  function clearMelody() {
-    setSelectedMelody([]);
   }
 
   function playChord(customNotes: string[] = notes) {
@@ -177,7 +135,6 @@ export default function ChordSearch() {
     if (selectedChord) setProgression((prev) => [...prev, selectedChord]);
   }
 
-  // Play progression with optional 8-bar loop toggle
   function playProgression() {
     if (!progression.length) return;
     let i = 0;
@@ -202,10 +159,6 @@ export default function ChordSearch() {
       };
       playNext();
     });
-  }
-
-  function clearProgression() {
-    setProgression([]);
   }
 
   return (
@@ -234,79 +187,25 @@ export default function ChordSearch() {
 
       {selectedChord && (
         <>
-          <div className="mt-6 flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-semibold">{selectedChord}</h2>
-              <p className="text-gray-700">
-                Notes: {notes.map((n) => n.slice(0, -1)).join(" - ")}
-              </p>
-            </div>
-            <button
-              onClick={addToProgression}
-              className="px-3 py-1 text-sm bg-indigo-500 text-white rounded hover:bg-indigo-600"
-            >
-              ➕ Add to Progression
-            </button>
-          </div>
-
-          {/* Suggested Bass Notes */}
-          <div className="mt-4">
-            <p className="font-medium mb-1">Suggested Bass Notes:</p>
-            <div className="flex flex-wrap gap-2">
-              {suggestBassNotes().map((note) => (
-                <button
-                  key={note}
-                  onClick={() => handleBassClick(note)}
-                  className={`px-3 py-1 rounded-lg border text-sm ${
-                    bassNote === note
-                      ? "bg-yellow-300 border-yellow-600"
-                      : "bg-gray-100 hover:bg-gray-200"
-                  }`}
-                >
-                  {note}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Melody Suggestions */}
-          <div className="mt-6">
-            <p className="font-medium text-lg mb-2">🎵 Melody Suggestions</p>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {suggestMelodyNotes().map((note) => (
-                <button
-                  key={note}
-                  onClick={() => toggleMelodyNote(note)}
-                  className={`px-3 py-1 rounded-lg border text-sm ${
-                    selectedMelody.includes(note)
-                      ? "bg-blue-400 text-white border-blue-600"
-                      : "bg-gray-100 hover:bg-blue-100"
-                  }`}
-                >
-                  {note}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-3 text-sm">
+          <CollapsibleSection title={`🎶 Chord: ${selectedChord}`}>
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-semibold">{selectedChord}</h2>
+                <p className="text-gray-700">
+                  Notes: {notes.map((n) => Note.pitchClass(n)).join(" - ")}
+                </p>
+              </div>
               <button
-                onClick={playMelodyPreview}
-                className="px-4 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                onClick={addToProgression}
+                className="px-3 py-1 text-sm bg-indigo-500 text-white rounded hover:bg-indigo-600"
               >
-                ▶ Play Melody
-              </button>
-              <button
-                onClick={clearMelody}
-                className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-              >
-                ❌ Clear
+                ➕ Add to Progression
               </button>
             </div>
-          </div>
+          </CollapsibleSection>
 
-          {/* Controls */}
-          <div className="mt-6 space-y-2 text-sm">
-            <div className="flex flex-wrap gap-4 items-center">
+          <CollapsibleSection title="🎛 Controls">
+            <div className="flex flex-wrap gap-3">
               <label>
                 <input
                   type="checkbox"
@@ -314,22 +213,6 @@ export default function ChordSearch() {
                   onChange={() => setIsMuted(!isMuted)}
                 />{" "}
                 Mute
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={inversion}
-                  onChange={() => setInversion(!inversion)}
-                />{" "}
-                Inversion
-              </label>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={harmonicsMode}
-                  onChange={() => setHarmonicsMode(!harmonicsMode)}
-                />{" "}
-                Harmonics
               </label>
               <label>
                 <input
@@ -342,20 +225,18 @@ export default function ChordSearch() {
               <label>
                 <input
                   type="checkbox"
-                  checked={useRootAsBass}
-                  onChange={() => setUseRootAsBass(!useRootAsBass)}
-                />{" "}
-                Use Root as Bass
-              </label>
-
-              {/* New 8-Bar Loop Toggle */}
-              <label>
-                <input
-                  type="checkbox"
                   checked={eightBarLoop}
                   onChange={() => setEightBarLoop(!eightBarLoop)}
                 />{" "}
                 8-Bar Loop
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={harmonicsMode}
+                  onChange={() => setHarmonicsMode(!harmonicsMode)}
+                />{" "}
+                Harmonics
               </label>
 
               <label>
@@ -396,82 +277,94 @@ export default function ChordSearch() {
                 </select>
               </label>
             </div>
-          </div>
+          </CollapsibleSection>
 
-          {/* Progression Templates */}
-          <div className="mt-6">
-            <label className="font-medium text-sm">
-              Progression Templates:
-            </label>
-            <select
-              className="ml-2 border p-1 rounded text-sm"
-              onChange={(e) => {
-                const selected = e.target.value;
-                if (selected && progressionTemplates[selected]) {
-                  setProgression(progressionTemplates[selected]);
-                  setSelectedChord(null);
-                  setNotes([]);
-                  setBassNote(null);
-                  setSelectedMelody([]);
-                }
-              }}
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Choose a progression
-              </option>
-              {Object.keys(progressionTemplates).map((label) => (
-                <option key={label} value={label}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Timeline */}
-          {progression.length > 0 && (
-            <div className="mt-8">
-              <h3 className="text-lg font-medium">Chord Progression</h3>
-              <div className="flex gap-2 mt-2 flex-wrap">
-                {progression.map((chord, idx) => (
-                  <div
-                    key={idx}
-                    className="px-3 py-1 bg-gray-100 rounded-md border cursor-default select-none"
+          <CollapsibleSection title="🎵 Melody Suggestions">
+            <div className="flex flex-wrap gap-2 mb-3">
+              {Scale.get(`${Note.pitchClass(notes[0])} major`).notes.map(
+                (n) => (
+                  <button
+                    key={n}
+                    onClick={() =>
+                      setSelectedMelody((prev) =>
+                        prev.includes(n + "5")
+                          ? prev.filter((note) => note !== n + "5")
+                          : [...prev, n + "5"]
+                      )
+                    }
+                    className={`px-3 py-1 rounded-lg border text-sm ${
+                      selectedMelody.includes(n + "5")
+                        ? "bg-blue-400 text-white border-blue-600"
+                        : "bg-gray-100 hover:bg-blue-100"
+                    }`}
                   >
-                    {chord}
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-3 mt-3">
-                <button
-                  onClick={playProgression}
-                  className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  ▶ Play Progression
-                </button>
-                <button
-                  onClick={clearProgression}
-                  className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                >
-                  🗑 Clear
-                </button>
-              </div>
+                    {n + "5"}
+                  </button>
+                )
+              )}
             </div>
-          )}
+            <button
+              onClick={playMelodyPreview}
+              className="px-4 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+            >
+              ▶ Play Melody
+            </button>
+          </CollapsibleSection>
 
-          {/* Piano UI */}
-          <Piano
-            notes={[
-              ...notes,
-              ...(bassNote ? [bassNote] : []),
-              ...selectedMelody,
-            ]}
-            bassNote={bassNote}
-            melodyNotes={selectedMelody}
-            muted={isMuted}
-            playStyle={playStyle}
-            duration={duration}
-          />
+          <CollapsibleSection title="🎼 Chord Progression">
+            <ChordProgressionSection
+              onSelect={(chords) => {
+                setProgression(chords);
+                setSelectedChord(null);
+                setNotes([]);
+                setBassNote(null);
+                setSelectedMelody([]);
+              }}
+            />
+            {progression.length > 0 && (
+              <div className="mt-4">
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  {progression.map((chord, i) => (
+                    <div
+                      key={i}
+                      className="px-3 py-1 bg-gray-100 rounded-md border"
+                    >
+                      {chord}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-3 mt-3">
+                  <button
+                    onClick={playProgression}
+                    className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  >
+                    ▶ Play Progression
+                  </button>
+                  <button
+                    onClick={() => setProgression([])}
+                    className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                  >
+                    🗑 Clear
+                  </button>
+                </div>
+              </div>
+            )}
+          </CollapsibleSection>
+
+          <CollapsibleSection title="🎹 Piano Visualizer">
+            <Piano
+              notes={[
+                ...notes,
+                ...(bassNote ? [bassNote] : []),
+                ...selectedMelody,
+              ]}
+              bassNote={bassNote}
+              melodyNotes={selectedMelody}
+              muted={isMuted}
+              playStyle={playStyle}
+              duration={duration}
+            />
+          </CollapsibleSection>
         </>
       )}
     </div>
